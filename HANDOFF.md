@@ -89,3 +89,23 @@ e0.1-constitution ✅ → e0.2-datamodel ✅ → e0.3-beta（次）→ e0.3-geom
 - 座標は world（Konva の getRelativePointerPosition / stage.scale・position）で統一。ズーム/パンしても vertices はぶれない。
 - localStorage キー `iraka.measurements.v1`。旧データは status/revision を自動補完。
 - 今のゴールは「OSを作る」ではなく **「実際の積算で毎日使いたくなる CAD を作る」**。
+
+## GitHub Pages 配信メモ
+- `vite.config.ts` に `base: '/iraka-estimation-os/'` を設定済み（Pages のサブパス配信用）。
+- 手順: `npm run build` → `dist/` を Pages へ公開（gh-pages ブランチ or GitHub Actions）。
+- リポジトリ名を変えたら `base` も合わせて変更する。ローカル `npm run dev` は base 有無に関わらず動作。
+
+## GitHub Pages 自動デプロイ（真っ白の解消）
+原因: Pages がビルド前のソース(main.tsx等)を配信していると真っ白になる。Vite は `dist/` を配信する必要がある。
+解決: `.github/workflows/deploy.yml` で自動ビルド＆デプロイ。
+
+手順（一度だけ）:
+1. リポジトリに `.github/workflows/deploy.yml` を置く（同梱済み）。
+2. GitHub → Settings → Pages → Build and deployment → **Source を「GitHub Actions」**に変更。
+3. `git push`（またはWebで workflow ファイルをアップロード）すると Actions が走り、`npm install → npm run build(vite) → dist を Pages へ`。
+4. Actions が緑✓になり 30秒〜1分で `https://<user>.github.io/iraka-estimation-os/` が表示される。
+
+補足:
+- `vite.config.ts` の `base: '/iraka-estimation-os/'` はリポジトリ名と一致必須。
+- `npm run build` は `vite build` のみ（CIを確実に通すため）。型チェックは `npm run typecheck`。
+- `proof/__pycache__` が既にコミット済みなら削除: `git rm -r --cached proof/__pycache__ && git commit -m "chore: drop __pycache__"`（今後は .gitignore で無視）。
