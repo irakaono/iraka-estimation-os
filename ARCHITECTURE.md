@@ -186,3 +186,31 @@ Phase F  Knowledge の充実（再利用が回り始める）
 
 各 Phase は、Field と同じ **品質ゲート**（自己テストが PASS してから確定）を通す。
 詳細な規律は `CONSTITUTION.md` を参照。
+
+---
+
+## 8. Future Work — Semantic Mapping（将来の拡張ポイント・e0.2 では実装しない）
+
+Measurement は、実は **2種類の情報の複合体**である。
+
+```
+Measurement ＝ Geometry（図面上の実体） ＋ Semantic（積算上の意味）
+   ├ Geometry : geometry / vertices / drawingRef / layer   … 図面にある「かたち」
+   └ Semantic : trade / item / basisDecision               … 「これは横暖S本体」という意味付け
+```
+
+Recognizer が PDF から作れるのは **Geometry だけ**。
+そのあと AI や人が「この Polygon は 屋根面A → 横暖S本体 → 屋根工事」という **意味付け**を与える。
+つまり将来、両者の間に **Semantic Mapping** 層が入り得る。
+
+```
+Geometry
+   ↓
+Semantic Mapping   ← AI / 人が意味を与える（Recognizer はここまで来ない）
+   ↓
+Measurement（Geometry ＋ 意味）
+```
+
+**e0.2 では新モデルを追加しない**（データモデルは5つのまま）。
+ここに図として記録だけ残す。将来 Recognizer を賢くする時、
+あるいは屋根だけでなく **設備・電気**まで扱う時に、この層を自然に足せるようにしておく。
