@@ -246,9 +246,11 @@ async function renderImage(file: File): Promise<HTMLImageElement> {
 }
 
 async function renderPdf(file: File): Promise<HTMLImageElement> {
-  const pdfjs: any = await import('pdfjs-dist');
-  const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = worker;
+  // pdfjs は CDN から動的読み込み（GitHub Pages でのバンドル/ワーカーパス問題を回避）。
+  // Vite にバンドルさせないため /* @vite-ignore */ を付ける。
+  const V = '4.7.76';
+  const pdfjs: any = await import(/* @vite-ignore */ `https://cdn.jsdelivr.net/npm/pdfjs-dist@${V}/build/pdf.min.mjs`);
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${V}/build/pdf.worker.min.mjs`;
   const data = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data }).promise;
   const page = await doc.getPage(1);
