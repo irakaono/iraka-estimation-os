@@ -1,9 +1,9 @@
 {
   "name": "iraka-estimation-os",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
-  "description": "甍AI Estimation OS — Geometry Editor (e0.3)",
+  "description": "甍AI Estimation OS — Geometry Editor (e0.3.1 / UI日本語化・fit)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

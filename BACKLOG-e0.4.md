@@ -1,49 +1,60 @@
-# e0.3-beta 検証 & e0.4 バックログ
+// 甍AI Estimation OS — Geometry Engine
+// エンジンは Measurement（の operation, vertices）を読むだけ。
+// 何を計算できるかは GEOMETRY_KNOWLEDGE が持つ（エンジンは拡張しない・Knowledgeを増やす）。
+// （DATAMODEL 不変条件10）
 
-> 目的が変わった。ここからのゴールは「OSを作る」ではなく
-> **「小野さんが実際の積算で毎日使いたくなる CAD を作る」**。
-> だから e0.3 は凍結し、`e0.3-beta` として **本物の屋根伏図で1棟拾い切れるか**だけを検証する。
+import type { Measurement, Operation, Vertex } from './types';
 
-## e0.3-beta 合格条件（止まらず最後まで）
+/** Polygon 面積（シューレース公式）。ピクセル面積を返す。 */
+export function polygonArea(v: Vertex[]): number {
+  const n = v.length;
+  if (n < 3) return 0;
+  let s = 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = v[i];
+    const [x2, y2] = v[(i + 1) % n];
+    s += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(s) / 2;
+}
 
-```
-住宅屋根伏図(PDF) → 縮尺較正 → 屋根A → 屋根B → 下屋 → Measurement保存 → measurements.json → 終了
-```
+/** Polyline / Line 長さ（線分の総和）。 */
+export function polylineLength(v: Vertex[]): number {
+  let s = 0;
+  for (let i = 0; i < v.length - 1; i++) {
+    const [x1, y1] = v[i];
+    const [x2, y2] = v[i + 1];
+    s += Math.hypot(x2 - x1, y2 - y1);
+  }
+  return s;
+}
 
-- [ ] PDF読込
-- [ ] 縮尺較正（実長mm → px/m）
-- [ ] 屋根A / 屋根B / 下屋 を Polygon で拾う
-- [ ] Measurement 保存
-- [ ] measurements.json 出力
+/** Point 個数。 */
+export function pointCount(v: Vertex[]): number {
+  return v.length;
+}
 
-これが**一度も詰まらず**終われば、`e0.3-geometry-editor` へ昇格。
+// 辞典: operation → calculator（将来ここに1行足すだけで拡張できる）
+export const GEOMETRY_KNOWLEDGE: Record<Operation, (v: Vertex[]) => number> = {
+  Area: polygonArea,
+  Length: polylineLength,
+  Count: pointCount,
+};
 
-## 検証記録（3棟ぶん・使うたびに埋める）
+/** 低レベル: operation と vertices から計算。 */
+export function calculate(operation: Operation, vertices: Vertex[]): number {
+  const fn = GEOMETRY_KNOWLEDGE[operation];
+  if (!fn) throw new Error(`Geometry Knowledge に operation '${operation}' が無い`);
+  return fn(vertices);
+}
 
-| 項目 | 1棟目 | 2棟目 | 3棟目 |
-|------|-------|-------|-------|
-| 図面（名前/縮尺） | | | |
-| 所要時間（分秒） | | | |
-| Polygon数 | | | |
-| Undo回数 | | | |
-| ズーム回数 | | | |
-| パン回数 | | | |
-| スナップ失敗 | | | |
-| 困ったこと（自由記述） | | | |
+/** Geometry Engine 本体：Measurement を読むだけ（画面→Measurement→ここ）。 */
+export function measure(m: Pick<Measurement, 'operation' | 'vertices'>): number {
+  return calculate(m.operation, m.vertices);
+}
 
-> 「開発者」ではなく「積算担当」として使う。設計思想は忘れ、
-> 「今日これで一棟拾えと言われたら困る所はどこか？」だけを書く。
-> 「このままでは仕事で使えない」と感じたら、それは失敗ではなく e0.4 最優先の改善項目。
-
-## e0.4 で初めて入れる候補（今決められる範囲）
-
-- Edge Snap（線の途中に吸着）
-- Undo履歴の可視化
-- Measurement 複数選択
-- Rectangle ツール
-- Polyline ツール
-- Point ツール
-
-## e0.4 でまだ入れないもの
-
-- AI / Recognizer（CAD Core が十分に使えるのが先）
+/** ピクセル値 → ㎡（scale = 1mあたりのピクセル数）。表示用の較正。 */
+export function toSquareMeters(pixelArea: number, pxPerMeter: number): number {
+  if (pxPerMeter <= 0) return 0;
+  return Math.round((pixelArea / (pxPerMeter * pxPerMeter)) * 100) / 100;
+}
