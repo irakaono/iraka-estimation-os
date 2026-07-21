@@ -7,6 +7,25 @@ body { margin: 0; font-family: 'Yu Gothic', 'Hiragino Kaku Gothic ProN', 'Segoe 
 .hint { font-size: 12px; color: #66707a; }
 .sidebar { width: 320px; border-left: 1px solid #dde3ea; padding: 12px; overflow: auto; background: #fafbfc; }
 
+/* 左: 案件エクスプローラー（e0.3.2） */
+.explorer { width: 240px; border-right: 1px solid #dde3ea; padding: 12px; overflow: auto; background: #fafbfc; display: flex; flex-direction: column; }
+.explorer h3 { margin: 0 0 10px; font-size: 13px; color: #1f4e79; letter-spacing: .03em; }
+.explorer .proj { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.explorer .proj-ico { font-size: 14px; }
+.explorer .proj-name { flex: 1; min-width: 0; padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: bold; color: #1f4e79; }
+.dwg-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.dwg-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.dwg-item:hover { border-color: #2e74b5; }
+.dwg-item.sel { border-color: #e8590c; background: #fff4ec; }
+.dwg-ico { font-size: 13px; flex: none; }
+.dwg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dwg-nav { display: flex; gap: 6px; margin-bottom: 10px; }
+.dwg-nav button { flex: 1; font-size: 12px; padding: 6px 4px; background: #fff; border: 1px solid #cbd5e1; color: #33414f; border-radius: 6px; cursor: pointer; }
+.dwg-nav button:hover:not(:disabled) { border-color: #2e74b5; color: #1f4e79; }
+.dwg-nav button:disabled { color: #b7c0cb; cursor: not-allowed; }
+.explorer .add { margin-top: auto; width: 100%; background: #fff; border: 1px solid #1f4e79; color: #1f4e79; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.explorer .add:hover { background: #1f4e79; color: #fff; }
+
 .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #1f4e79; color: #fff; flex-wrap: wrap; }
 .toolbar .sp { flex: 1; }
 .toolbar label { font-size: 12px; display: flex; align-items: center; gap: 4px; }

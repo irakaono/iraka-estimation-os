@@ -1,74 +1,64 @@
-// ツールバー: 図面読込 / Polygon / 縮尺較正 / スナップ / ズーム / 縮尺
-import { useRef } from 'react';
+// エクスプローラー（案件エクスプローラー）: 案件に属する図面一式を左に表示する。
+// e0.3.2 では中身は「図面一覧」だけだが、器は将来 AI認識候補 / Measurement / 手積算比較 /
+// Evidence まで生やす前提で「エクスプローラー」として設計する。
+import type { Drawing } from '../geometry/types';
 
 interface Props {
-  drawing: boolean;
-  scale: number;
-  zoom: number;
-  snapOn: boolean;
-  calibrating: boolean;
-  canFinish: boolean;
-  canUndo: boolean;
-  onScale: (n: number) => void;
-  onToggleSnap: () => void;
-  onCalibrate: () => void;
-  onResetView: () => void;
-  onUndo: () => void;
-  onNewPolygon: () => void;
-  onFinish: () => void;
-  onClear: () => void;
-  onLoadBackground: (f: File) => void;
+  projectName: string;
+  drawings: Drawing[];
+  currentId: string | null;
+  onRenameProject: (name: string) => void;
+  onSelect: (id: string) => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onAdd: () => void; // 図面を追加（ファイル選択を開く）
 }
 
-export default function Toolbar(props: Props) {
-  const fileRef = useRef<HTMLInputElement>(null);
+export default function Explorer(props: Props) {
+  const idx = props.drawings.findIndex((d) => d.drawingId === props.currentId);
 
   return (
-    <div className="toolbar">
-      <strong>甍AI 拾いエディタ</strong>
-      <span style={{ opacity: 0.6, fontSize: 12 }}>e0.3.1</span>
+    <aside className="explorer">
+      <h3>エクスプローラー</h3>
 
-      <label className="file" onClick={() => fileRef.current?.click()}>
-        図面を読み込む
+      <div className="proj">
+        <span className="proj-ico">📁</span>
         <input
-          ref={fileRef}
-          type="file"
-          accept="application/pdf,image/*"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) props.onLoadBackground(f);
-            e.target.value = '';
-          }}
+          className="proj-name"
+          value={props.projectName}
+          placeholder="案件名"
+          onChange={(e) => props.onRenameProject(e.target.value)}
         />
-      </label>
+      </div>
 
-      <button onClick={props.onNewPolygon}>＋ 多角形を描く</button>
-      <button onClick={props.onFinish} disabled={!props.drawing || !props.canFinish}>確定</button>
-      <button className="ghost" onClick={props.onClear}>クリア</button>
-      <button className="ghost" onClick={props.onUndo} disabled={!props.canUndo} title="Ctrl+Z">↶ 元に戻す</button>
+      {props.drawings.length === 0 ? (
+        <div className="list-empty">
+          まだ図面がありません。<br />「＋ 図面を追加」から複数のPDF/画像を取り込むか、キャンバスにドラッグ&ドロップしてください。
+        </div>
+      ) : (
+        <div className="dwg-list">
+          {props.drawings.map((d) => (
+            <div
+              key={d.drawingId}
+              className={'dwg-item' + (d.drawingId === props.currentId ? ' sel' : '')}
+              onClick={() => props.onSelect(d.drawingId)}
+              title={d.name}
+            >
+              <span className="dwg-ico">📄</span>
+              <span className="dwg-name">{d.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <button className="ghost" onClick={props.onCalibrate}
-        style={props.calibrating ? { background: '#e8590c', borderColor: '#e8590c' } : undefined}>
-        縮尺較正
-      </button>
-      <label>
-        <input type="checkbox" checked={props.snapOn} onChange={props.onToggleSnap} /> スナップ
-      </label>
+      {props.drawings.length > 1 && (
+        <div className="dwg-nav">
+          <button onClick={props.onPrev} disabled={idx <= 0}>← 前の図面</button>
+          <button onClick={props.onNext} disabled={idx < 0 || idx >= props.drawings.length - 1}>次の図面 →</button>
+        </div>
+      )}
 
-      <span className="sp" />
-
-      <label>
-        縮尺(px/m)
-        <input
-          type="number"
-          min={1}
-          value={props.scale}
-          onChange={(e) => props.onScale(Math.max(1, Number(e.target.value) || 1))}
-        />
-      </label>
-      <span style={{ fontSize: 12 }}>ズーム {(props.zoom * 100).toFixed(0)}%</span>
-      <button className="ghost" onClick={props.onResetView}>全体表示</button>
-    </div>
+      <button className="add" onClick={props.onAdd}>＋ 図面を追加</button>
+    </aside>
   );
 }

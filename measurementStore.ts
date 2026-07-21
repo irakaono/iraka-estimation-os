@@ -4,14 +4,16 @@
 // e0.3 UX: スナップ / ズーム・パン / 縮尺較正 / Polygon自動閉じ / Undo(Ctrl+Z)。
 // ※ AI / Recognizer / Excel / 見積 / 単価 / Roof Engine / Edge Snap は作らない（Edge Snapはe0.4）。
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Toolbar from './components/Toolbar';
 import GeometryCanvas from './components/GeometryCanvas';
+import Explorer from './components/Explorer';
 import Properties from './components/Properties';
 import MeasurementList from './components/MeasurementList';
 import { measure, toSquareMeters } from './geometry/geometryEngine';
 import { loadMeasurements, persist, nextId, exportJSON } from './geometry/measurementStore';
-import type { Measurement, Vertex } from './geometry/types';
+import type { Drawing, Measurement, Project, Vertex } from './geometry/types';
+import { PROJECT_SCHEMA_VERSION } from './geometry/types';
 
 const CANVAS_W = 900;
 const CANVAS_H = 620;
@@ -31,8 +33,16 @@ export default function App() {
   const [drawing, setDrawing] = useState(false);
   const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
   const [scale, setScale] = useState(50); // px per meter
-  const [bg, setBg] = useState<HTMLImageElement | null>(null);
   const [seed, setSeed] = useState({ trade: '屋根工事', item: '横暖S 本体' });
+
+  // e0.3.2: 案件 = 図面一式。現在表示中の図面の画像が背景になる。
+  const [project, setProject] = useState<Project>({
+    schemaVersion: PROJECT_SCHEMA_VERSION, name: '無題の案件', drawings: [],
+  });
+  const [currentDrawingId, setCurrentDrawingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentDrawing = project.drawings.find((d) => d.drawingId === currentDrawingId) ?? null;
+  const bg = currentDrawing?.image ?? null; // 背景 = 現在の図面（無ければ null）
 
   // UX: ズーム/パン・スナップ・パンキー・縮尺較正
   const [zoom, setZoom] = useState(1);
@@ -154,21 +164,86 @@ export default function App() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [selectedVertex, deleteVertex, undo]);
 
-  const loadBackground = async (file: File) => {
-    try {
-      const img = file.type === 'application/pdf' ? await renderPdf(file) : await renderImage(file);
-      setBg(img); fitToView(img); // 読み込み時に図面全体が収まる初期ズーム
-    } catch (err) {
-      console.error(err);
-      alert('図面の読み込みに失敗しました。画像(PNG/JPG)またはPDFを選んでください。');
+  // 複数ファイル取り込み: 画像=1図面 / PDF=ページごとに1図面。取り込んだ先頭を表示して fit。
+  const loadFiles = async (files: File[]) => {
+    let seq = project.drawings.reduce(
+      (mx, d) => Math.max(mx, parseInt(d.drawingId.replace(/\D/g, ''), 10) || 0), 0,
+    );
+    const incoming: Drawing[] = [];
+    for (const file of files) {
+      const base = file.name.replace(/\.[^.]+$/, '');
+      try {
+        if (file.type === 'application/pdf') {
+          const pages = await renderPdfPages(file);
+          pages.forEach((img, i) => {
+            incoming.push({
+              drawingId: 'D-' + String(++seq).padStart(3, '0'),
+              name: pages.length > 1 ? `${base} (p${i + 1})` : base,
+              sourceName: file.name, page: i + 1, pageCount: pages.length, image: img,
+            });
+          });
+        } else {
+          const img = await renderImage(file);
+          incoming.push({
+            drawingId: 'D-' + String(++seq).padStart(3, '0'),
+            name: base, sourceName: file.name, page: 1, pageCount: 1, image: img,
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        alert(`「${file.name}」の読み込みに失敗しました。画像(PNG/JPG)またはPDFを選んでください。`);
+      }
     }
+    if (incoming.length === 0) return;
+    setProject((p) => ({ ...p, drawings: [...p.drawings, ...incoming] }));
+    setCurrentDrawingId(incoming[0].drawingId);
+    fitToView(incoming[0].image); // 取り込み時に図面全体が収まる初期ズーム
   };
+
+  const openFilePicker = () => fileInputRef.current?.click();
+  const renameProject = (name: string) => setProject((p) => ({ ...p, name }));
+
+  // 図面切替（背景を切り替えて fit）。← → は前後の図面へ。
+  const switchDrawing = (id: string) => {
+    const d = project.drawings.find((x) => x.drawingId === id);
+    if (!d) return;
+    setCurrentDrawingId(id);
+    fitToView(d.image);
+  };
+  const stepDrawing = (dir: 1 | -1) => {
+    const ds = project.drawings;
+    if (ds.length === 0) return;
+    const i = ds.findIndex((d) => d.drawingId === currentDrawingId);
+    const ni = Math.min(ds.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir));
+    if (ds[ni]) switchDrawing(ds[ni].drawingId);
+  };
+
+  // キャンバスへのドラッグ&ドロップで取り込み
+  const onDropFiles = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const fs = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+    if (fs.length) loadFiles(fs);
+  };
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); };
 
   const editingId = editing?.measurementId || null;
   const others = measurements.filter((m) => m.measurementId !== editingId);
 
   return (
     <div className="app">
+      {/* 図面ファイル選択（複数可）。ツールバーとエクスプローラーの両方から開く */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const fs = e.target.files ? Array.from(e.target.files) : [];
+          if (fs.length) loadFiles(fs);
+          e.target.value = '';
+        }}
+      />
       <Toolbar
         drawing={drawing}
         scale={scale}
@@ -185,10 +260,20 @@ export default function App() {
         onNewPolygon={newPolygon}
         onFinish={finish}
         onClear={cancel}
-        onLoadBackground={loadBackground}
+        onOpenFiles={openFilePicker}
       />
       <div className="main">
-        <div className="canvas-wrap">
+        <Explorer
+          projectName={project.name}
+          drawings={project.drawings}
+          currentId={currentDrawingId}
+          onRenameProject={renameProject}
+          onSelect={switchDrawing}
+          onPrev={() => stepDrawing(-1)}
+          onNext={() => stepDrawing(1)}
+          onAdd={openFilePicker}
+        />
+        <div className="canvas-wrap" onDrop={onDropFiles} onDragOver={onDragOver}>
           <GeometryCanvas
             width={CANVAS_W}
             height={CANVAS_H}
@@ -215,7 +300,7 @@ export default function App() {
             onCalibClick={onCalibClick}
           />
           <div className="hint">
-            左クリック=頂点／ドラッグ=移動／Delete=削除／右クリック or 始点クリック=確定／Shift=直交／ホイール=ズーム／Space+ドラッグ=パン／Ctrl+Z=元に戻す
+            左クリック=頂点／ドラッグ=移動／Delete=削除／右クリック or 始点クリック=確定／Shift=直交／ホイール=ズーム／Space+ドラッグ=パン／Ctrl+Z=元に戻す／図面はここにドラッグ&ドロップでも取り込めます
             {calibrating && <b style={{ color: '#e8590c' }}>　← 縮尺較正: 基準線の2点をクリック</b>}
           </div>
         </div>
@@ -258,23 +343,32 @@ async function renderImage(file: File): Promise<HTMLImageElement> {
   return img;
 }
 
-async function renderPdf(file: File): Promise<HTMLImageElement> {
-  // pdfjs は CDN から動的読み込み（GitHub Pages でのバンドル/ワーカーパス問題を回避）。
-  // Vite にバンドルさせないため /* @vite-ignore */ を付ける。
-  const V = '4.7.76';
-  const pdfjs: any = await import(/* @vite-ignore */ `https://cdn.jsdelivr.net/npm/pdfjs-dist@${V}/build/pdf.min.mjs`);
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${V}/build/pdf.worker.min.mjs`;
+// pdfjs のワーカーURL（これはただの文字列代入なので変数でよい）。
+const PDFJS_WORKER_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
+
+// PDF の全ページを画像化して返す（e0.3.2: 複数ページ対応。1ページ = 1図面）。
+async function renderPdfPages(file: File): Promise<HTMLImageElement[]> {
+  // 重要: import() の URL は「固定の文字列リテラルを直接」書くこと。
+  // テンプレートリテラル（${V}）や変数にすると、バンドラが「変数の動的import」と誤認し
+  // URL を ./https:/... に書き換えて壊す（single-file 版の "Unknown variable dynamic import" の原因）。
+  // @ts-ignore — URL からの実行時 import。型解決は不要（Vite/ブラウザが処理）。文字列リテラル必須。
+  const pdfjs: any = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
   const data = await file.arrayBuffer();
   const doc = await pdfjs.getDocument({ data }).promise;
-  const page = await doc.getPage(1);
-  const viewport = page.getViewport({ scale: 1.5 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2d context 取得失敗');
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  const img = new Image();
-  await new Promise<void>((res) => { img.onload = () => res(); img.src = canvas.toDataURL(); });
-  return img;
+  const images: HTMLImageElement[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2d context 取得失敗');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const img = new Image();
+    await new Promise<void>((res) => { img.onload = () => res(); img.src = canvas.toDataURL(); });
+    images.push(img);
+  }
+  return images;
 }
